@@ -13,7 +13,7 @@ def main():
         cpu_fraction = int(cpu_fraction)
         qnt_devices = int(qnt_devices)
 
-        for i in range(qnt_devices):
+        for _ in range(qnt_devices):
             name, simultaneous_access, operating_time = file.readline().strip().split("|")
             devices.append(
                 Device(name, int(simultaneous_access),
