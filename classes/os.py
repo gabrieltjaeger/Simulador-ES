@@ -70,10 +70,8 @@ class OperatingSystem:
 
     def scheduler(self) -> None:
         while not self.kill:
-            if len(self.ready_processes) > 0:
-                cycle_output = ""
-                cycle_output += OUTPUT_CYCLE_SEPARATOR + "\n"
-                cycle_output += f"CPU Clock: {self.cpu_clock} u.t." + "\n"
+            if self.ready_processes:
+                cycle_output = f"CPU Clock: {self.cpu_clock} u.t." + "\n"
 
                 cycle_output += "\nReady processes:" + "\n"
                 self.lock.acquire()
@@ -123,33 +121,26 @@ class OperatingSystem:
 
                 device: Device
                 for device in self.devices:
-                    cycle_output += f" - {device.name}, Requests: {len(device.requests)}" + "\n"
+                    cycle_output += f" - {device.name}, Requests: {len(device.requests)}/{device.quantity}" + "\n"
                     if len(device.requests) > 0:
                         request: Process
                         for request in device.requests:
                             cycle_output += f"    - {request.PID}, Unblocking time: {self.blocked_processes[request]}" + "\n"
 
                 print(cycle_output.rstrip())
-                
+                print(OUTPUT_CYCLE_SEPARATOR)
             else: # No ready processes, so we wait for a process to be unblocked
                 if (time() - self.last_clock_update) > .5:
                     if self.all_processes_ended():
+                        self.disconnect_devices()
                         self.kill = True
                     self.update_clock(1)
-        
-        print(OUTPUT_CYCLE_SEPARATOR)
-        for process, time_when_finished in self.finished_processes.items():
-            print(f"{process.PID} finished at {time_when_finished} u.t.")
-        print(OUTPUT_CYCLE_SEPARATOR)
-
-        self.disconnect_devices()
         sys.exit()
 
     def disconnect_devices(self) -> None:
         device: Device
         for device in self.devices:
             device.disconnect()
-        print("All devices disconnected.")
 
     def run(self) -> None:
         threads = []
@@ -164,9 +155,17 @@ class OperatingSystem:
         thread = threading.Thread(target=self.scheduler)
         threads.append(thread)
 
+        print(OUTPUT_CYCLE_SEPARATOR)
+        
         thread: threading.Thread
         for thread in threads:
             thread.start()
 
         for thread in threads:
             thread.join()
+        
+        process: Process
+        for process, time_when_finished in self.finished_processes.items():
+            print(f"{process.PID} finished at {time_when_finished} u.t.")
+
+        print(OUTPUT_CYCLE_SEPARATOR)
