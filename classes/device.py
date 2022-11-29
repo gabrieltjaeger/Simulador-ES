@@ -40,11 +40,14 @@ class Device:
 
     def run(self) -> None:
         while not self.kill:
-            self.semaphore.acquire()
+            self.lock.acquire()
+            if len(self.processes_using) >= self.quantity:
+                self.lock.release()
+                continue
+            self.lock.release()
             if len(self.requests) > 0:
                 request = self.get_request()
                 self.update_processes_using(request)
-            self.semaphore.release()
         sys.exit()
 
     def disconnect(self) -> None:

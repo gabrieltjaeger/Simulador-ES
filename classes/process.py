@@ -1,3 +1,4 @@
+import random
 import threading
 from time import sleep
 
@@ -17,7 +18,7 @@ class Process:
         self.lock.acquire()
         if device is None:
             self.using_device.lock.acquire()
-            self.using_device.processes_using.remove(self)
+            self.using_device.update_processes_using()
             self.using_device.lock.release()
         self.using_device = device
         self.lock.release()
@@ -39,3 +40,6 @@ class Process:
 
     def ended(self) -> bool:
         return self.operating_time <= 0
+    
+    def will_use_device(self) -> bool:
+        return random.randint(0, 100) <= self.probability_of_executing_a_device

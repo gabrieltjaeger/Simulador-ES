@@ -24,7 +24,8 @@ class OperatingSystem:
 
     def all_processes_ended(self) -> bool:
         self.semaphore.acquire()
-        ended = len(self.ready_processes) == 0 and len(self.blocked_processes) == 0
+        ended = len(self.ready_processes) == 0 and len(
+            self.blocked_processes) == 0
         self.semaphore.release()
         return ended
 
@@ -56,85 +57,101 @@ class OperatingSystem:
             self.cpu_clock += 1
 
     def block_process(self, process: Process, time: int, device: Device) -> None:
-        self.lock.acquire()
         self.blocked_processes[process] = self.cpu_clock + time
+        device.semaphore.acquire()
+        device.add_request(process)
         process.update_using_device(device)
-        self.lock.release()
 
     def unblock_process(self, process: Process) -> None:
         self.lock.acquire()
         self.blocked_processes.pop(process)
         self.ready_processes.append(process)
+        process.using_device.semaphore.release()
         process.update_using_device()
         self.lock.release()
 
+    def output_ready_processes(self) -> str:
+        output = "\nReady processes:" + "\n"
+        self.lock.acquire()
+        process: Process
+        for process in self.ready_processes:
+            output += f" - {process.PID}, Remaining time: {process.operating_time} u.t." + "\n"
+        if len(self.ready_processes) == 0:
+            output += " - None" + "\n"
+        self.lock.release()
+        return output
+
+    def output_blocked_processes(self) -> str:
+        output = "\nBlocked processes:" + "\n"
+        self.lock.acquire()
+        blocked_processes = copy(self.blocked_processes)
+        process: Process
+        for process, time_of_unblocking in blocked_processes.items():
+            process.lock.acquire()
+            output += f" - {process.PID}, Remaining time: {process.operating_time} u.t., Unblocking time: {time_of_unblocking}{f', Device in use: {process.using_device.name}' if type(process.using_device) == Device else ''}" + "\n"
+            process.lock.release()
+        if len(blocked_processes) == 0:
+            output += " - None" + "\n"
+        self.lock.release()
+        return output
+
+    def output_running_process(self) -> str:
+        process: Process = self.ready_processes[0]
+        return f"\nRunning process {process.PID}\nRemaining time: {process.operating_time} u.t.\n"
+
+    def output_devices(self) -> str:
+        output = "\nDevices:" + "\n"
+        device: Device
+        self.lock.acquire()
+        for device in self.devices:
+            output += f" - {device.name}, Requests: {len(device.processes_using)}/{device.quantity}" + "\n"
+            if len(device.requests) > 0:
+                request: Process
+                for request in device.requests:
+                    output += f"    - {request.PID}, Unblocking time: {self.blocked_processes[request]}" + "\n"
+        self.lock.release()
+        return output.rstrip()
+    
     def scheduler(self) -> None:
         while not self.kill:
             if self.ready_processes:
-                cycle_output = f"CPU Clock: {self.cpu_clock} u.t." + "\n"
+                cycle_output: str = f"CPU Clock: {self.cpu_clock} u.t." + "\n"
 
-                cycle_output += "\nReady processes:" + "\n"
-                self.lock.acquire()
-                for process in self.ready_processes:
-                    cycle_output += f" - {process.PID}, Remaining time: {process.operating_time} u.t." + "\n"
-                if len(self.ready_processes) == 0:
-                    cycle_output += " - None" + "\n"
-                self.lock.release()
+                cycle_output += self.output_ready_processes()
+                cycle_output += self.output_blocked_processes()
+                cycle_output += self.output_running_process()
 
-                cycle_output += "\nBlocked processes:" + "\n"
-                self.lock.acquire()
-                for process, time_of_unblocking in copy(self.blocked_processes).items():
-                    process.lock.acquire()
-                    cycle_output += f" - {process.PID}, Remaining time: {process.operating_time} u.t., Unblocking time: {time_of_unblocking}{f', Device in use: {process.using_device.name}' if type(process.using_device) == Device else ''}" + "\n"
-                    process.lock.release()
-                if len(self.blocked_processes) == 0:
-                    cycle_output += " - None" + "\n"
-                self.lock.release()
+                process: Process = self.ready_processes.pop(0) # Chosen process is the first one in the list
+                
+                if process.will_use_device():
+                    chosen_device: Device = random.choice(self.devices)
+                    time_of_fraction_to_use_device = random.randint(1, self.cpu_fraction)
+                    self.update_clock(process.reduce_operating_time(time_of_fraction_to_use_device-1))
+                    if not process.ended():
+                        self.block_process(process, chosen_device.operating_time, chosen_device)
+                else:
+                    self.update_clock(process.reduce_operating_time(self.cpu_fraction))
 
-                process: Process = self.ready_processes.pop(0)
-                cycle_output += f"\nRunning process: {process.PID}" + "\n"
-                cycle_output += f"Remaining time: {process.operating_time} u.t." + "\n"
-
-                will_use_device = random.randint(0, 100) <= process.probability_of_executing_a_device
-                chosen_device: Device = random.choice(self.devices) if will_use_device else None
-
-                time_of_fraction_to_use_device = random.randint(1, self.cpu_fraction) if will_use_device else 0
-
-                time_of_execution = time_of_fraction_to_use_device-1 if will_use_device else self.cpu_fraction
-
-                time_of_its_fraction_used_by_the_process = process.reduce_operating_time(time_of_execution)
-                self.update_clock(time_of_its_fraction_used_by_the_process)
-
-                if will_use_device and not process.ended():
-                    chosen_device.add_request(process)
-                    self.block_process(process, chosen_device.operating_time, chosen_device)
+                cycle_output += f"\nCPU Clock: {self.cpu_clock} u.t." + "\n"
 
                 if process.ended():
                     self.finished_processes[process] = self.cpu_clock
-                
-                if process not in self.blocked_processes and not process.ended():    
-                    self.lock.acquire()
-                    self.ready_processes.append(process)
-                    self.lock.release()
+                else:
+                    if process not in self.blocked_processes:
+                        self.lock.acquire()
+                        self.ready_processes.append(process)
+                        self.lock.release()
 
-                cycle_output += "\nDevices:" + "\n"
+                cycle_output += self.output_devices()
 
-                device: Device
-                for device in self.devices:
-                    cycle_output += f" - {device.name}, Requests: {len(device.requests)}/{device.quantity}" + "\n"
-                    if len(device.requests) > 0:
-                        request: Process
-                        for request in device.requests:
-                            cycle_output += f"    - {request.PID}, Unblocking time: {self.blocked_processes[request]}" + "\n"
-
-                print(cycle_output.rstrip())
+                print(cycle_output)
                 print(OUTPUT_CYCLE_SEPARATOR)
-            else: # No ready processes, so we wait for a process to be unblocked
-                if (time() - self.last_clock_update) > .5:
-                    if self.all_processes_ended():
-                        self.disconnect_devices()
-                        self.kill = True
-                    self.update_clock(1)
+                continue
+            if (time() - self.last_clock_update) > .5:
+                if self.all_processes_ended():
+                    self.disconnect_devices()
+                    self.kill = True
+                self.update_clock(1)
         sys.exit()
 
     def disconnect_devices(self) -> None:
@@ -156,14 +173,14 @@ class OperatingSystem:
         threads.append(thread)
 
         print(OUTPUT_CYCLE_SEPARATOR)
-        
+
         thread: threading.Thread
         for thread in threads:
             thread.start()
 
         for thread in threads:
             thread.join()
-        
+
         process: Process
         for process, time_when_finished in self.finished_processes.items():
             print(f"{process.PID} finished at {time_when_finished} u.t.")
