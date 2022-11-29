@@ -8,7 +8,7 @@ from .consts import OUTPUT_CYCLE_SEPARATOR
 from .device import Device
 from .process import Process
 
-
+## SISTEMA OPERACIONAL: aqui acontece o sistema de alternância circular, com threads e semaforos para intercalar com os dispositivos de entrada e saida.
 class OperatingSystem:
     def __init__(self, processes: list, devices: list, cpu_fraction: int) -> None:
         self.ready_processes = processes
