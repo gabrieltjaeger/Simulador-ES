@@ -8,4 +8,4 @@ Para rodar este código, é necessário que todas as pastas estejam localizadas 
 
 Após isso, é necessário apenas rodar em um terminal: python3 main.py.
 
-Ele simulará o funcionamento de processos que pedem operações de E/S, de acordo com a formatação do arquivo entradas.txt, como disponibilizado pelo professor Pedro.
+Ele simulará o funcionamento de processos que pedem operações de E/S, de acordo com a formatação do arquivo entrada_es.txt, como disponibilizado pelo professor Pedro.
